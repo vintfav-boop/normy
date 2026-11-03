@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Учет норм времени ЖАТ</title>
+  <!-- SheetJS: локальная копия (кладётся в www при сборке), CDN — запасной вариант -->
+  <script src="xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    :root {
+      --primary: #2563eb; --primary-soft: #eff6ff; --primary-chip: #dbeafe;
+      --success: #059669; --info: #0284c7; --share: #4f46e5; --warning: #d97706; --danger: #dc2626;
+      --bg: #f1f5f9; --card-bg: #ffffff; --surface: #f8fafc; --surface2: #f1f5f9;
+      --border: #e2e8f0; --row-border: #f1f5f9;
+      --text-main: #1e293b; --text-muted: #64748b;
+      --badge-bg: #e0e7ff; --badge-text: #3730a3;
+      --hl-bg: #d1fae5; --hl-text: #065f46; --hl-border: #a7f3d0;
+      --month-bg: #e0f2fe; --month-text: #0369a1; --month-border: #bae6fd;
+      --stat-bg: #f0fdf4; --stat-border: #bbf7d0; --stat-text: #166534; --bar-bg: #dcfce7; --bar: #16a34a;
+      --shadow: rgba(0,0,0,.06);
+    }
+    :root[data-theme="dark"] {
+      --primary: #60a5fa; --primary-soft: #1e293b; --primary-chip: #1e3a5f;
+      --bg: #0b1220; --card-bg: #111a2e; --surface: #17223b; --surface2: #1b2742;
+      --border: #263350; --row-border: #1c2842;
+      --text-main: #e5e9f2; --text-muted: #94a3b8;
+      --badge-bg: #312e81; --badge-text: #c7d2fe;
+      --hl-bg: #052e22; --hl-text: #6ee7b7; --hl-border: #065f46;
+      --month-bg: #0c2a3d; --month-text: #7dd3fc; --month-border: #0c4a6e;
+      --stat-bg: #0a2a1a; --stat-border: #14532d; --stat-text: #86efac; --bar-bg: #14532d; --bar: #22c55e;
+      --shadow: rgba(0,0,0,.4);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --primary: #60a5fa; --primary-soft: #1e293b; --primary-chip: #1e3a5f;
+        --bg: #0b1220; --card-bg: #111a2e; --surface: #17223b; --surface2: #1b2742;
+        --border: #263350; --row-border: #1c2842;
+        --text-main: #e5e9f2; --text-muted: #94a3b8;
+        --badge-bg: #312e81; --badge-text: #c7d2fe;
+        --hl-bg: #052e22; --hl-text: #6ee7b7; --hl-border: #065f46;
+        --month-bg: #0c2a3d; --month-text: #7dd3fc; --month-border: #0c4a6e;
+        --stat-bg: #0a2a1a; --stat-border: #14532d; --stat-text: #86efac; --bar-bg: #14532d; --bar: #22c55e;
+        --shadow: rgba(0,0,0,.4);
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
+    html { background: var(--bg); }
+    body { background: var(--bg); color: var(--text-main); padding: 12px; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: center; min-height: 100vh; }
+    .app-container { width: 100%; max-width: 520px; background: var(--card-bg); border-radius: 16px; box-shadow: 0 4px 20px var(--shadow); padding: 16px; position: relative; align-self: flex-start; }
+    .header-title { text-align: center; color: var(--primary); font-size: 20px; font-weight: 800; margin-bottom: 12px; }
+
+    .tabs-nav { display: flex; background: var(--surface2); padding: 4px; border-radius: 10px; margin-bottom: 16px; gap: 4px; }
+    .tab-btn { flex: 1; border: none; background: transparent; padding: 9px 4px; font-size: 13px; font-weight: 600; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: all .2s ease; }
+    .tab-btn.active { background: var(--card-bg); color: var(--primary); box-shadow: 0 2px 6px var(--shadow); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .form-group { margin-bottom: 14px; position: relative; }
+    .form-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
+    .form-input { width: 100%; height: 46px; padding: 10px 14px; font-size: 16px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text-main); outline: none; transition: border-color .2s, background-color .2s; }
+    .form-input:focus { border-color: var(--primary); background: var(--card-bg); }
+    select.form-input { appearance: auto; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .dropdown-container { position: relative; }
+    .dropdown-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow-y: auto; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 100; display: none; }
+    .dropdown-item { padding: 11px 14px; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--row-border); }
+    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-item:active, .dropdown-item.hl { background: var(--primary-soft); }
+    .norm-badge { font-size: 12px; font-weight: 600; color: var(--primary); background: var(--primary-chip); padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+    .dropdown-add-btn { padding: 12px 14px; text-align: center; font-size: 13px; font-weight: 600; color: var(--primary); background: var(--surface); cursor: pointer; border-top: 1px dashed var(--border); }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
+    .chip { border: 1.5px solid var(--border); background: var(--surface); color: var(--text-main); font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 16px; cursor: pointer; }
+    .chip:active { background: var(--primary-soft); border-color: var(--primary); }
+
+    .qty-row { display: grid; grid-template-columns: 52px 1fr 52px; gap: 8px; }
+    .qty-btn { height: 46px; border: 1.5px solid var(--border); background: var(--surface); color: var(--primary); font-size: 22px; font-weight: 700; border-radius: 10px; cursor: pointer; }
+    .qty-btn:active { background: var(--primary-soft); }
+    .qty-row .form-input { text-align: center; font-weight: 700; }
+
+    .btn { width: 100%; height: 46px; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: filter .2s, transform .05s; color: #fff; }
+    .btn:active { transform: scale(.98); filter: brightness(.9); }
+    .btn-primary { background: #2563eb; } .btn-success { background: var(--success); } .btn-info { background: var(--info); }
+    .btn-share { background: var(--share); } .btn-warning { background: var(--warning); } .btn-danger { background: var(--danger); }
+    .btn-outline { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-sm { height: 40px; font-size: 13px; }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .actions-stack { display: flex; flex-direction: column; gap: 10px; }
+
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 8px; }
+    .section-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .pos-badge { background: var(--badge-bg); color: var(--badge-text); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px; }
+
+    .table-container { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 14px; background: var(--card-bg); }
+    .custom-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .custom-table th { background: var(--surface); color: var(--text-muted); font-weight: 700; text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: .3px; }
+    .custom-table td { padding: 6px 4px; border-bottom: 1px solid var(--row-border); vertical-align: middle; }
+    .custom-table tr:last-child td { border-bottom: none; }
+    .col-name { width: 34%; font-weight: 600; word-break: break-word; padding-left: 8px !important; }
+    .col-num { width: 17%; text-align: center; }
+    .col-norm { width: 17%; text-align: center; color: var(--text-muted); font-weight: 600; font-size: 11px; }
+    .col-total { width: 24%; text-align: center; font-weight: 700; color: var(--primary); }
+    .col-del { width: 8%; text-align: center; }
+    .table-qty-input, .table-time-input { width: 100%; height: 34px; text-align: center; font-size: 13px; font-weight: 700; border: 1.5px solid var(--border); border-radius: 8px; background: var(--surface); padding: 2px; outline: none; }
+    .table-qty-input { max-width: 52px; color: var(--text-main); }
+    .table-time-input { max-width: 66px; color: var(--primary); }
+    .table-qty-input:focus, .table-time-input:focus { border-color: var(--primary); background: var(--card-bg); }
+
+    .action-icon-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 6px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
+    .del-btn:active { color: var(--danger); }
+    .empty-state { text-align: center; padding: 24px 12px; color: var(--text-muted); font-size: 13px; }
+
+    .total-banner { background: var(--hl-bg); border: 1.5px solid var(--hl-border); color: var(--hl-text); padding: 12px 16px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-weight: 800; font-size: 14px; }
+    .total-banner.blue { background: var(--month-bg); border-color: var(--month-border); color: var(--month-text); }
+    .total-val { font-size: 17px; }
+
+    .month-stats-card { background: var(--stat-bg); border: 1.5px solid var(--stat-border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .month-stats-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: var(--stat-text); }
+    .progress-bar-bg { width: 100%; height: 8px; background: var(--bar-bg); border-radius: 4px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: var(--bar); width: 0; transition: width .3s ease; }
+    .mini-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .mini-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px; text-align: center; }
+    .mini-stat b { display: block; font-size: 15px; color: var(--text-main); }
+    .mini-stat span { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: .3px; }
+
+    .shift-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+    .shift-head { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .shift-date { font-weight: 700; font-size: 13px; flex: 1; }
+    .shift-hrs { font-weight: 800; color: var(--primary); font-size: 14px; white-space: nowrap; }
+    .shift-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.3; }
+    .shift-detail { display: none; margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 6px; font-size: 12px; }
+    .shift-card.open .shift-detail { display: block; }
+    .shift-pos { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+    .shift-pos span:last-child { font-weight: 700; white-space: nowrap; }
+    .shift-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .shift-actions button { flex: 1; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text-main); font-size: 12px; font-weight: 600; cursor: pointer; }
+    .shift-actions button.danger { color: var(--danger); }
+
+    .backup-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+    .backup-status-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 8px; }
+    .backup-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
+    .badge-on { background: #dcfce7; color: #15803d; } .badge-off { background: #fee2e2; color: #b91c1c; }
+    .hint { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-bottom: 10px; }
+
+    .format-selector { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .format-chip { border: 1.5px solid var(--border); background: var(--surface); padding: 12px 4px; border-radius: 10px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 700; }
+    .format-chip.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+    .share-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .share-btn-item { padding: 12px 8px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none; }
+    .share-btn-item:active { background: var(--primary-soft); border-color: var(--primary); }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(2px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
+    .modal-box { background: var(--card-bg); border-radius: 16px; padding: 20px; width: 100%; max-width: 360px; max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; text-align: center; }
+    .modal-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; text-align: center; }
+    .modal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+
+    .toast { position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(120px); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 30px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.3); z-index: 2000; transition: transform .3s ease, opacity .3s ease; opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 12px; max-width: 92vw; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+    .toast-action { background: none; border: none; color: #93c5fd; font-weight: 800; font-size: 13px; cursor: pointer; padding: 4px; display: none; }
+
+    .db-list-container { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; background: var(--card-bg); }
+    .db-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--row-border); font-size: 13px; }
+    .db-row:last-child { border-bottom: none; }
+    .db-row-name { font-weight: 600; flex: 1; padding-right: 8px; word-break: break-word; }
+    .db-row-norm { color: var(--primary); font-weight: 700; margin-right: 6px; white-space: nowrap; }
+    .db-row-actions { display: flex; gap: 2px; }
+
+    body:not(.is-native) .native-only { display: none !important; }
+    body.is-native .web-only { display: none !important; }
+  </style>
+
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Нормы ЖАТ">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <script>
+    if ("serviceWorker" in navigator && location.protocol === "https:") {
+      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.warn));
+    }
+  </script>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="header-title">Учет норм времени ЖАТ</div>
+
+  <div class="tabs-nav">
+    <button class="tab-btn active" data-tab="daily">📋 Смена</button>
+    <button class="tab-btn" data-tab="monthly">📊 Месяц</button>
+    <button class="tab-btn" data-tab="db">⚙️ Настройки</button>
+  </div>
+
+  <!-- ============ СМЕНА ============ -->
+  <div id="tab-daily" class="tab-content active">
+    <div class="two-col">
+      <div class="form-group">
+        <label class="form-label">Исполнитель</label>
+        <input type="text" id="executorInput" class="form-input" placeholder="Фамилия" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Дата смены</label>
+        <input type="date" id="shiftDateInput" class="form-input">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Поиск прибора или работы</label>
+      <div class="dropdown-container">
+        <input type="text" id="deviceSearchInput" class="form-input" placeholder="Начните вводить тип (АНШ, 1Н...)" autocomplete="off" enterkeyhint="next">
+        <div id="deviceDropdown" class="dropdown-list"></div>
+      </div>
+    </div>
+
+    <div class="chips" id="quickChips"></div>
+
+    <div class="form-group">
+      <label class="form-label">Количество</label>
+      <div class="qty-row">
+        <button class="qty-btn" id="qtyMinus" type="button">−</button>
+        <input type="number" id="quantityInput" class="form-input" value="1" min="0.01" step="any" inputmode="decimal" enterkeyhint="done">
+        <button class="qty-btn" id="qtyPlus" type="button">+</button>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="addPositionBtn" style="margin-bottom:14px;">Добавить позицию</button>
+
+    <div class="section-header">
+      <span class="section-title">Выполненные работы</span>
+      <span class="pos-badge" id="positionsBadge">0 поз.</span>
+    </div>
+
+    <div class="table-container">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th class="col-name">НАИМЕНОВАНИЕ</th>
+            <th class="col-num" style="text-align:center">КОЛ.</th>
+            <th class="col-norm" style="text-align:center">НОРМА</th>
+            <th class="col-total" style="text-align:center">ИТОГО</th>
+            <th class="col-del"></th>
+          </tr>
+        </thead>
+        <tbody id="shiftTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="total-banner">
+      <span>ВСЕГО ЗА СМЕНУ:</span>
+      <span class="total-val" id="shiftTotalHours">0.000 ч</span>
+    </div>
+
+    <div class="actions-stack">
+      <div class="btn-row">
+        <button class="btn btn-share" id="shareShiftBtn">📤 Отправить</button>
+        <button class="btn btn-success" id="saveShiftBtn">💾 Сохранить</button>
+      </div>
+      <button class="btn btn-warning" id="closeShiftBtn">Закрыть смену</button>
+      <button class="btn btn-outline" id="clearShiftBtn">Очистить всю смену</button>
+    </div>
+  </div>
+
+  <!-- ============ МЕСЯЦ ============ -->
+  <div id="tab-monthly" class="tab-content">
+    <div class="two-col">
+      <div class="form-group">
+        <label class="form-label">Месяц</label>
+        <select id="monthSelect" class="form-input"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">План, часов</label>
+        <input type="number" id="monthNormInput" class="form-input" placeholder="160" min="1" step="0.5" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="total-banner blue">
+      <span id="monthlyPeriodTitle">Отчет за месяц</span>
+      <span class="total-val" id="monthlyTotalHours">0.000 ч</span>
+    </div>
+
+    <div class="month-stats-card">
+      <div class="month-stats-row">
+        <span>Выполнение нормы:</span>
+        <span id="monthlyPercentText" style="font-size:16px;font-weight:800;">0.0%</span>
+      </div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="monthlyProgressBar"></div></div>
+    </div>
+
+    <div class="mini-stats">
+      <div class="mini-stat"><b id="statShifts">0</b><span>смен</span></div>
+      <div class="mini-stat"><b id="statAvg">0.0</b><span>ч / смену</span></div>
+      <div class="mini-stat"><b id="statLeft">0.0</b><span>ч осталось</span></div>
+    </div>
+
+    <div class="section-header">
+      <span class="section-title">Сводка по типам приборов</span>
+      <span class="pos-badge" id="monthlyTypesBadge">0 типов</span>
+    </div>
+    <div class="table-container">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th style="width:46%;padding-left:8px">ПРИБОР</th>
+            <th style="width:16%;text-align:center">КОЛ-ВО</th>
+            <th style="width:18%;text-align:right">НОРМА</th>
+            <th style="width:20%;text-align:right;padding-right:8px">СУММА</th>
+          </tr>
+        </thead>
+        <tbody id="monthlySummaryBody"></tbody>
+      </table>
+    </div>
+
+    <div class="section-header">
+      <span class="section-title">Журнал закрытых смен</span>
+      <span class="pos-badge" id="monthlyShiftsCountBadge">0 смен</span>
+    </div>
+    <div id="monthlyShiftsList" style="margin-bottom:14px;"></div>
+
+    <div class="actions-stack">
+      <div class="btn-row">
+        <button class="btn btn-share" id="shareMonthBtn">📤 Отправить</button>
+        <button class="btn btn-success" id="saveMonthBtn">💾 Сохранить</button>
+      </div>
+      <button class="btn btn-outline" id="deleteMonthBtn" style="color:var(--danger)">Удалить смены выбранного месяца</button>
+    </div>
+  </div>
+
+  <!-- ============ НАСТРОЙКИ ============ -->
+  <div id="tab-db" class="tab-content">
+    <div class="section-header" style="margin-top:0">
+      <span class="section-title">Резервное копирование</span>
+    </div>
+    <div class="backup-card">
+      <div class="backup-status-row">
+        <span style="font-weight:600">Автобэкап (раз в сутки и при закрытии смены):</span>
+        <span class="backup-badge badge-off" id="backupStatusBadge">Не настроен</span>
+      </div>
+      <div class="hint" id="backupHint">Копия всех смен, норм и базы приборов защищает данные от очистки кэша или переустановки.</div>
+      <div class="actions-stack">
+        <button class="btn btn-info btn-sm web-only" id="pickFolderBtn">📁 Настроить папку автобэкапа (1 раз)</button>
+        <div class="btn-row">
+          <button class="btn btn-success btn-sm" id="manualBackupBtn">💾 Копия сейчас</button>
+          <button class="btn btn-primary btn-sm" id="restoreBtn">📥 Восстановить</button>
+        </div>
+      </div>
+      <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none">
+    </div>
+
+    <div class="section-header">
+      <span class="section-title">Оформление</span>
+    </div>
+    <button class="btn btn-outline btn-sm" id="themeBtn" style="margin-bottom:6px">🌗 Тема: авто</button>
+
+    <div class="section-header">
+      <span class="section-title">База приборов</span>
+      <span class="pos-badge" id="dbTotalBadge">0 шт.</span>
+    </div>
+    <div class="form-group">
+      <input type="text" id="dbSearchInput" class="form-input" placeholder="Поиск в базе приборов..." autocomplete="off">
+    </div>
+    <button class="btn btn-primary" id="addDeviceBtn" style="margin-bottom:12px;">➕ Добавить новый прибор</button>
+    <div class="db-list-container" id="dbList"></div>
+
+    <div class="actions-stack">
+      <div class="btn-row">
+        <button class="btn btn-success btn-sm" id="exportMdBtn">Экспорт .MD (код)</button>
+        <button class="btn btn-success btn-sm" id="exportXlsxBtn">Экспорт .XLSX</button>
+      </div>
+      <button class="btn btn-info" id="importDbBtn">📥 Импорт базы (.XLSX / .MD)</button>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls,.md,.txt,.json" style="display:none">
+      <button class="btn btn-outline" id="resetDbBtn">Сброс к исходной базе</button>
+    </div>
+    <div class="hint" style="text-align:center;margin-top:14px">Версия 13</div>
+  </div>
+</div>
+
+<!-- Модалка: сохранить отчёт -->
+<div class="modal-overlay" id="saveModal">
+  <div class="modal-box">
+    <div class="modal-title" id="saveModalTitle">Сохранение отчета</div>
+    <div class="hint" style="text-align:center">Выберите формат файла:</div>
+    <div class="format-selector">
+      <div class="format-chip active" data-fmt="xlsx">📊 .XLSX</div>
+      <div class="format-chip" data-fmt="txt">📝 .TXT</div>
+      <div class="format-chip" data-fmt="md">📄 .MD</div>
+    </div>
+    <div class="actions-stack">
+      <button class="btn btn-success" id="saveFileBtn">💾 Сохранить файл</button>
+      <button class="btn btn-share" id="shareFileBtn">📤 Поделиться файлом</button>
+      <button class="btn btn-outline" data-close="saveModal">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка: запасная отправка -->
+<div class="modal-overlay" id="fallbackShareModal">
+  <div class="modal-box">
+    <div class="modal-title">Отправить отчет</div>
+    <div class="share-options-grid">
+      <a id="shareLinkTg" class="share-btn-item" target="_blank" rel="noopener">✈️ Telegram</a>
+      <a id="shareLinkWa" class="share-btn-item" target="_blank" rel="noopener">💬 WhatsApp</a>
+      <a id="shareLinkMail" class="share-btn-item">✉️ Почта</a>
+      <div class="share-btn-item" id="copyTextBtn">📋 Копировать</div>
+    </div>
+    <button class="btn btn-outline" data-close="fallbackShareModal">Закрыть</button>
+  </div>
+</div>
+
+<!-- Модалка: первая настройка папки (веб) -->
+<div class="modal-overlay" id="firstTimeFolderModal">
+  <div class="modal-box">
+    <div class="modal-title">🛡️ Защита данных ЖАТ</div>
+    <div class="modal-text">Чтобы заполненные смены и нормы не пропали при очистке кэша или смене браузера, настройте папку для <b>ежедневного автобэкапа</b>.</div>
+    <div class="actions-stack">
+      <button class="btn btn-primary" id="firstFolderOkBtn">📁 Выбрать папку (1 раз)</button>
+      <button class="btn btn-outline" id="firstFolderLaterBtn">Напомнить позже</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка: дата закрытой смены -->
+<div class="modal-overlay" id="editDateModal">
+  <div class="modal-box">
+    <div class="modal-title">Изменить дату смены</div>
+    <div class="form-group">
+      <label class="form-label">Новая дата</label>
+      <input type="date" id="newShiftDateInput" class="form-input">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" data-close="editDateModal">Отмена</button>
+      <button class="btn btn-primary" id="saveShiftDateBtn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка: прибор -->
+<div class="modal-overlay" id="addDeviceModal">
+  <div class="modal-box">
+    <div class="modal-title" id="deviceModalTitle">Добавить прибор в базу</div>
+    <div class="form-group">
+      <label class="form-label">Наименование прибора</label>
+      <input type="text" id="newDeviceName" class="form-input" placeholder="Например: АНШ2-40" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Норма времени (в часах)</label>
+      <input type="number" id="newDeviceNorm" class="form-input" placeholder="Например: 1.548" step="0.001" min="0" inputmode="decimal">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" data-close="addDeviceModal">Отмена</button>
+      <button class="btn btn-primary" id="saveDeviceBtn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка: подтверждение -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-title" id="confirmTitle">Подтверждение</div>
+    <div class="modal-text" id="confirmText"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" id="confirmNoBtn">Отмена</button>
+      <button class="btn btn-danger" id="confirmYesBtn">Да</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg"></span><button class="toast-action" id="toastAction"></button></div>
+
+<script>
+  /* ==========================================================================
+     БАЗА ПРИБОРОВ ПО УМОЛЧАНИЮ (initialDb)
+     Формат элемента: { "name": "Название прибора", "total": норма_в_часах }
+     Вставьте сюда ваш список. Либо загрузите базу позже через
+     «Настройки → Импорт базы (.XLSX / .MD)».
+     ========================================================================== */
+  const initialDb = [
+    // >>> ВСТАВЛЯЙТЕ ВАШ СПИСОК ПРИБОРОВ СЮДА <<<
+  ];
+  /* ========================== КОНЕЦ БЛОКА БАЗЫ ============================ */
+
+  const $ = (id) => document.getElementById(id);
+  const ruCollator = new Intl.Collator('ru', { numeric: true, sensitivity: 'base' });
+  const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  const Cap = window.Capacitor;
+  const isNative = !!(Cap && typeof Cap.isNativePlatform === 'function' && Cap.isNativePlatform());
+  const plugin = (name) => (Cap && Cap.Plugins && Cap.Plugins[name]) || null;
+  if (isNative) document.body.classList.add('is-native');
+
+  // ---------- состояние ----------
+  let devicesDb = [];
+  let currentShift = [];
+  let monthlyShifts = [];
+  let selectedDevice = null;
+  let monthlyNormHours = 160;
+  let selectedMonth = '';
+  let editingOriginalIndex = null;
+  let editingShiftId = null;
+  let exportContext = 'shift';
+  let saveFormat = 'xlsx';
+  let cachedShareText = '';
+  let lastDeleted = null;
+  let dropdownMatches = [];
+  let dropdownHl = -1;
+
+  // ---------- утилиты ----------
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
+  function parseRuFloat(val) {
+    if (val == null) return NaN;
+    return parseFloat(String(val).replace(',', '.').trim());
+  }
+  function debounce(fn, ms = 150) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+  function lsGet(key, def) {
+    try { const v = localStorage.getItem(key); return v == null ? def : JSON.parse(v); } catch (e) { return def; }
+  }
+  function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { console.warn(e); } }
+  const pad2 = (n) => String(n).padStart(2, '0');
+  // Локальная дата (в отличие от toISOString не «съезжает» из-за часового пояса)
+  function todayIso() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+  function isoToRu(iso) { const [y,m,d] = iso.split('-'); return `${d}.${m}.${y}`; }
+  function ruToIso(ru) {
+    const p = String(ru || '').split('.');
+    if (p.length !== 3) return '';
+    return `${p[2]}-${pad2(p[1])}-${pad2(p[0])}`;
+  }
+  function monthKeyOfShift(s) { return ruToIso(s.date).slice(0, 7) || todayIso().slice(0, 7); }
+  function monthLabel(key) { const [y, m] = key.split('-'); return `${MONTH_NAMES[Number(m)-1]} ${y}`; }
+  const fmt3 = (n) => (Number(n) || 0).toFixed(3);
+
+  // ---------- тосты / подтверждение / модалки ----------
+  let toastTimer = null;
+  function showToast(msg, actionLabel, actionFn) {
+    const t = $('toast'), a = $('toastAction');
+    $('toastMsg').textContent = msg;
+    if (actionLabel && actionFn) {
+      a.textContent = actionLabel; a.style.display = 'inline-block';
+      a.onclick = () => { actionFn(); t.classList.remove('show'); };
+    } else { a.style.display = 'none'; a.onclick = null; }
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), actionLabel ? 5000 : 2400);
+  }
+
+  const MODALS = ['confirmModal','saveModal','fallbackShareModal','firstTimeFolderModal','editDateModal','addDeviceModal'];
+  function openModal(id) { $(id).style.display = 'flex'; }
+  function closeModal(id) { $(id).style.display = 'none'; }
+  function topOpenModal() { return MODALS.find(id => $(id).style.display === 'flex') || null; }
+
+  function askConfirm(title, text, yesLabel = 'Да') {
+    return new Promise((resolve) => {
+      $('confirmTitle').textContent = title;
+      $('confirmText').textContent = text;
+      $('confirmYesBtn').textContent = yesLabel;
+      const done = (v) => { closeModal('confirmModal'); $('confirmYesBtn').onclick = $('confirmNoBtn').onclick = null; resolve(v); };
+      $('confirmYesBtn').onclick = () => done(true);
+      $('confirmNoBtn').onclick = () => done(false);
+      openModal('confirmModal');
+    });
+  }
+
+  // ---------- вкладки ----------
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tabId));
+    if (tabId === 'monthly') renderMonthlyReport();
+    if (tabId === 'db') { renderDbList(); updateBackupStatusUI(); }
+    window.scrollTo({ top: 0 });
+  }
+  function currentTab() { return (document.querySelector('.tab-btn.active') || {}).dataset?.tab || 'daily'; }
+
+  // ---------- тема ----------
+  function applyTheme() {
+    const th = localStorage.getItem('jat_theme') || 'auto';
+    if (th === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', th);
+    $('themeBtn').textContent = '🌗 Тема: ' + ({ auto: 'авто', light: 'светлая', dark: 'тёмная' }[th]);
+  }
+  function cycleTheme() {
+    const order = ['auto','light','dark'];
+    const cur = localStorage.getItem('jat_theme') || 'auto';
+    localStorage.setItem('jat_theme', order[(order.indexOf(cur) + 1) % 3]);
+    applyTheme();
+  }
+
+  // ==========================================================================
+  //  ДАННЫЕ
+  // ==========================================================================
+  function loadDatabase() {
+    const saved = localStorage.getItem('jat_norms_db');
+    if (saved) {
+      try { devicesDb = JSON.parse(saved); if (!Array.isArray(devicesDb)) throw 0; }
+      catch (e) { devicesDb = [...initialDb]; }
+    } else {
+      devicesDb = [...initialDb];
+      saveDatabase();
+    }
+    sortDatabase();
+  }
+  function sortDatabase() { devicesDb.sort((a, b) => ruCollator.compare(a.name, b.name)); }
+  function saveDatabase() { sortDatabase(); lsSet('jat_norms_db', devicesDb); }
+
+  function loadCurrentShift() { const v = lsGet('jat_current_shift', []); currentShift = Array.isArray(v) ? v : []; }
+  function saveCurrentShift() { lsSet('jat_current_shift', currentShift); }
+  function loadMonthlyData() { const v = lsGet('jat_monthly_shifts', []); monthlyShifts = Array.isArray(v) ? v : []; }
+  function saveMonthlyData() { lsSet('jat_monthly_shifts', monthlyShifts); }
+
+  function loadExecutor() { $('executorInput').value = localStorage.getItem('jat_executor_name') || ''; }
+  function loadMonthNorm() {
+    const p = parseRuFloat(localStorage.getItem('jat_month_norm'));
+    monthlyNormHours = (!isNaN(p) && p > 0) ? p : 160;
+    $('monthNormInput').value = monthlyNormHours;
+  }
+
+  function reloadAll() {
+    loadDatabase(); loadExecutor(); loadCurrentShift(); loadMonthlyData(); loadMonthNorm();
+    renderShiftTable(); renderQuickChips(); renderMonthlyReport(); renderDbList();
+  }
+
+  // ==========================================================================
+  //  ПОИСК ПРИБОРА
+  // ==========================================================================
+  function matchDevices(query) {
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return [];
+    const list = devicesDb.filter(d => { const n = d.name.toLowerCase(); return tokens.every(t => n.includes(t)); });
+    const q = query.toLowerCase();
+    list.sort((a, b) => {
+      const an = a.name.toLowerCase(), bn = b.name.toLowerCase();
+      const as = an.startsWith(q) ? 0 : 1, bs = bn.startsWith(q) ? 0 : 1;
+      return as - bs || ruCollator.compare(a.name, b.name);
+    });
+    return list.slice(0, 40);
+  }
+
+  function handleDeviceSearch() {
+    const input = $('deviceSearchInput');
+    const raw = input.value.trim();
+    const dd = $('deviceDropdown');
+    if (!raw) { dd.style.display = 'none'; dd.innerHTML = ''; selectedDevice = null; dropdownMatches = []; return; }
+    dropdownMatches = matchDevices(raw);
+    dropdownHl = dropdownMatches.length ? 0 : -1;
+    renderDropdown(raw);
+  }
+  function renderDropdown(raw) {
+    const dd = $('deviceDropdown');
+    const parts = dropdownMatches.map((d, i) => `
+      <div class="dropdown-item${i === dropdownHl ? ' hl' : ''}" data-i="${i}">
+        <span>${escapeHtml(d.name)}</span><span class="norm-badge">${fmt3(d.total)} ч</span>
+      </div>`);
+    parts.push(`<div class="dropdown-add-btn" data-add="1">➕ Добавить «${escapeHtml(raw)}» в базу</div>`);
+    dd.innerHTML = parts.join('');
+    dd.style.display = 'block';
+  }
+  function selectDevice(d) {
+    selectedDevice = d;
+    $('deviceSearchInput').value = d.name;
+    $('deviceDropdown').style.display = 'none';
+    $('quantityInput').focus();
+    $('quantityInput').select();
+  }
+
+  // быстрые кнопки: самые частые приборы
+  function renderQuickChips() {
+    const cnt = new Map();
+    const bump = (name) => cnt.set(name, (cnt.get(name) || 0) + 1);
+    monthlyShifts.forEach(s => (s.positions || []).forEach(p => bump(p.name)));
+    currentShift.forEach(p => bump(p.name));
+    const top = [...cnt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([name]) => devicesDb.find(d => d.name === name)).filter(Boolean);
+    $('quickChips').innerHTML = top.map(d => `<button class="chip" data-name="${escapeHtml(d.name)}">${escapeHtml(d.name)}</button>`).join('');
+    $('quickChips').style.display = top.length ? 'flex' : 'none';
+  }
+
+  // ==========================================================================
+  //  СМЕНА
+  // ==========================================================================
+  function addPosition() {
+    const queryName = $('deviceSearchInput').value.trim();
+    const qty = parseRuFloat($('quantityInput').value);
+    if (!queryName) { showToast('⚠️ Укажите наименование прибора'); return; }
+    if (isNaN(qty) || qty <= 0) { showToast('⚠️ Введите корректное количество'); return; }
+
+    let device = selectedDevice;
+    if (!device || device.name.toLowerCase() !== queryName.toLowerCase()) {
+      device = devicesDb.find(d => d.name.toLowerCase() === queryName.toLowerCase());
+    }
+    if (!device) { openAddDeviceModal(queryName); return; }
+
+    const norm = Number(device.total);
+    currentShift.push({ name: device.name, qty, norm, time: Number((qty * norm).toFixed(3)) });
+    saveCurrentShift();
+    renderShiftTable();
+    $('deviceSearchInput').value = '';
+    $('quantityInput').value = '1';
+    selectedDevice = null;
+    $('deviceDropdown').style.display = 'none';
+    showToast('Позиция добавлена');
+    $('deviceSearchInput').focus();
+  }
+
+  function renderShiftTable() {
+    const tbody = $('shiftTableBody');
+    $('positionsBadge').textContent = `${currentShift.length} поз.`;
+    if (!currentShift.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Нет добавленных работ</td></tr>`;
+      $('shiftTotalHours').textContent = '0.000 ч';
+      return;
+    }
+    let total = 0;
+    tbody.innerHTML = currentShift.map((pos, idx) => {
+      const n = Number(pos.norm) || 0, t = Number(pos.time) || 0;
+      total = Number((total + t).toFixed(3));
+      return `<tr>
+        <td class="col-name">${escapeHtml(pos.name)}</td>
+        <td class="col-num"><input type="number" class="table-qty-input" data-idx="${idx}" data-f="qty" value="${pos.qty}" min="0.01" step="any" inputmode="decimal"></td>
+        <td class="col-norm">${fmt3(n)}</td>
+        <td class="col-total"><input type="number" class="table-time-input" data-idx="${idx}" data-f="time" value="${fmt3(t)}" min="0" step="0.001" inputmode="decimal"></td>
+        <td class="col-del"><button class="action-icon-btn del-btn" data-del="${idx}" aria-label="Удалить">✕</button></td>
+      </tr>`;
+    }).join('');
+    $('shiftTotalHours').textContent = `${fmt3(total)} ч`;
+  }
+
+  function onShiftTableChange(e) {
+    const inp = e.target.closest('input[data-idx]');
+    if (!inp) return;
+    const idx = Number(inp.dataset.idx), val = parseRuFloat(inp.value);
+    const pos = currentShift[idx];
+    if (!pos) return;
+    if (inp.dataset.f === 'qty') {
+      if (isNaN(val) || val <= 0) { showToast('⚠️ Количество должно быть больше 0'); renderShiftTable(); return; }
+      pos.qty = val; pos.time = Number((val * pos.norm).toFixed(3));
+    } else {
+      if (isNaN(val) || val < 0) { showToast('⚠️ Введите корректное время'); renderShiftTable(); return; }
+      pos.time = Number(val.toFixed(3));
+      showToast('Итого по строке изменено вручную');
+    }
+    saveCurrentShift(); renderShiftTable();
+  }
+
+  function deletePosition(idx) {
+    const [removed] = currentShift.splice(idx, 1);
+    lastDeleted = { idx, pos: removed };
+    saveCurrentShift(); renderShiftTable();
+    showToast('Позиция удалена', 'Отменить', () => {
+      if (!lastDeleted) return;
+      currentShift.splice(Math.min(lastDeleted.idx, currentShift.length), 0, lastDeleted.pos);
+      lastDeleted = null; saveCurrentShift(); renderShiftTable();
+    });
+  }
+
+  async function clearCurrentShift() {
+    if (!currentShift.length) return;
+    if (await askConfirm('Очистить смену', 'Удалить все добавленные работы текущей смены?', 'Очистить')) {
+      currentShift = []; saveCurrentShift(); renderShiftTable(); showToast('Смена очищена');
+    }
+  }
+
+  async function closeShift() {
+    if (!currentShift.length) { showToast('⚠️ Нет позиций для закрытия смены'); return; }
+    const executor = $('executorInput').value.trim() || 'Без имени';
+    const iso = $('shiftDateInput').value || todayIso();
+    const total = currentShift.reduce((a, p) => a + (Number(p.time) || 0), 0);
+    const dateRu = isoToRu(iso);
+
+    const same = monthlyShifts.filter(s => s.date === dateRu && s.executor === executor).length;
+    if (same) {
+      const ok = await askConfirm('Смена за эту дату уже есть', `За ${dateRu} уже закрыто смен: ${same}. Добавить ещё одну?`, 'Добавить');
+      if (!ok) return;
+    }
+
+    monthlyShifts.push({
+      id: Date.now(), date: dateRu, executor, totalHours: Number(total.toFixed(3)),
+      positions: currentShift.map(p => ({ name: p.name, qty: Number(p.qty) || 1, norm: Number(p.norm) || 0, time: Number(p.time) || 0 }))
+    });
+    saveMonthlyData();
+    currentShift = []; saveCurrentShift();
+    $('shiftDateInput').value = todayIso();
+    selectedMonth = iso.slice(0, 7);
+    renderShiftTable(); renderQuickChips(); renderMonthlyReport();
+    runAutoBackup(true);
+    showToast('✅ Смена закрыта и добавлена в месяц');
+  }
+
+  // ==========================================================================
+  //  МЕСЯЦ
+  // ==========================================================================
+  function availableMonths() {
+    const set = new Set(monthlyShifts.map(monthKeyOfShift));
+    set.add(todayIso().slice(0, 7));
+    if (selectedMonth) set.add(selectedMonth);
+    return [...set].sort().reverse();
+  }
+  function shiftsOfSelectedMonth() {
+    return monthlyShifts.filter(s => monthKeyOfShift(s) === selectedMonth)
+      .sort((a, b) => ruToIso(b.date).localeCompare(ruToIso(a.date)) || b.id - a.id);
+  }
+  function buildTypeMap(shifts) {
+    const map = {}; let total = 0;
+    shifts.forEach(s => (s.positions || []).forEach(p => {
+      const q = Number(p.qty) || 0, n = Number(p.norm) || 0, t = Number(p.time) || 0;
+      if (!map[p.name]) map[p.name] = { qty: 0, norm: n, total: 0 };
+      map[p.name].qty = Number((map[p.name].qty + q).toFixed(2));
+      map[p.name].total = Number((map[p.name].total + t).toFixed(3));
+      total = Number((total + t).toFixed(3));
+    }));
+    return { map, total };
+  }
+
+  function renderMonthlyReport() {
+    if (!selectedMonth) selectedMonth = todayIso().slice(0, 7);
+    $('monthSelect').innerHTML = availableMonths().map(k => `<option value="${k}"${k === selectedMonth ? ' selected' : ''}>${monthLabel(k)}</option>`).join('');
+
+    const shifts = shiftsOfSelectedMonth();
+    const { map, total } = buildTypeMap(shifts);
+    const plan = monthlyNormHours > 0 ? monthlyNormHours : 160;
+    const pct = (total / plan) * 100;
+
+    $('monthlyPeriodTitle').textContent = `Отчет: ${monthLabel(selectedMonth)}`;
+    $('monthlyTotalHours').textContent = `${fmt3(total)} ч`;
+    $('monthlyPercentText').textContent = `${pct.toFixed(1)}% (из ${plan} ч)`;
+    $('monthlyProgressBar').style.width = `${Math.min(pct, 100)}%`;
+    $('statShifts').textContent = shifts.length;
+    $('statAvg').textContent = shifts.length ? (total / shifts.length).toFixed(1) : '0.0';
+    $('statLeft').textContent = Math.max(plan - total, 0).toFixed(1);
+
+    const keys = Object.keys(map).sort(ruCollator.compare);
+    $('monthlyTypesBadge').textContent = `${keys.length} типов`;
+    $('monthlyShiftsCountBadge').textContent = `${shifts.length} смен`;
+    $('monthlySummaryBody').innerHTML = keys.length ? keys.map(name => {
+      const it = map[name];
+      return `<tr>
+        <td class="col-name">${escapeHtml(name)}</td>
+        <td style="text-align:center">${it.qty}</td>
+        <td style="text-align:right">${fmt3(it.norm)}</td>
+        <td style="text-align:right;font-weight:700;color:var(--primary);padding-right:8px">${fmt3(it.total)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4" class="empty-state">Нет закрытых смен за этот месяц</td></tr>`;
+
+    $('monthlyShiftsList').innerHTML = shifts.length ? shifts.map(s => {
+      const poss = (s.positions || []);
+      return `<div class="shift-card" data-id="${s.id}">
+        <div class="shift-head" data-toggle="${s.id}">
+          <span class="shift-date">📅 ${escapeHtml(s.date || 'Дата не указана')}</span>
+          <span class="shift-hrs">${fmt3(s.totalHours)} ч</span>
+          <span style="color:var(--text-muted)">▾</span>
+        </div>
+        <div class="shift-sub">${escapeHtml(s.executor || '')} · ${poss.length} поз.</div>
+        <div class="shift-detail">
+          ${poss.map(p => `<div class="shift-pos"><span>${escapeHtml(p.name)} × ${p.qty}</span><span>${fmt3(p.time)} ч</span></div>`).join('') || 'Нет позиций'}
+          <div class="shift-actions">
+            <button data-edit="${s.id}">✏️ Дата</button>
+            <button data-reopen="${s.id}">↩️ Вернуть в смену</button>
+            <button class="danger" data-delshift="${s.id}">🗑 Удалить</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty-state">Журнал пуст</div>';
+  }
+
+  function openEditShiftDateModal(id) {
+    const s = monthlyShifts.find(x => x.id === id);
+    if (!s) return;
+    editingShiftId = id;
+    $('newShiftDateInput').value = ruToIso(s.date) || todayIso();
+    openModal('editDateModal');
+  }
+  function saveNewShiftDate() {
+    const val = $('newShiftDateInput').value;
+    if (!val) { showToast('⚠️ Выберите дату'); return; }
+    const s = monthlyShifts.find(x => x.id === editingShiftId);
+    if (s) {
+      s.date = isoToRu(val); saveMonthlyData();
+      selectedMonth = val.slice(0, 7);
+      renderMonthlyReport(); showToast('✅ Дата смены обновлена');
+    }
+    closeModal('editDateModal'); editingShiftId = null;
+  }
+
+  async function deleteShift(id) {
+    const s = monthlyShifts.find(x => x.id === id);
+    if (!s) return;
+    if (await askConfirm('Удалить смену', `Удалить смену за ${s.date} (${fmt3(s.totalHours)} ч)?`, 'Удалить')) {
+      const idx = monthlyShifts.indexOf(s);
+      monthlyShifts.splice(idx, 1); saveMonthlyData(); renderMonthlyReport(); renderQuickChips();
+      showToast('Смена удалена', 'Отменить', () => {
+        monthlyShifts.splice(Math.min(idx, monthlyShifts.length), 0, s);
+        saveMonthlyData(); renderMonthlyReport(); renderQuickChips();
+      });
+    }
+  }
+
+  async function reopenShift(id) {
+    const s = monthlyShifts.find(x => x.id === id);
+    if (!s) return;
+    if (currentShift.length && !(await askConfirm('Вернуть смену', 'В текущей смене уже есть позиции. Добавить к ним позиции из выбранной смены?', 'Добавить'))) return;
+    currentShift.push(...(s.positions || []).map(p => ({ ...p })));
+    saveCurrentShift();
+    monthlyShifts.splice(monthlyShifts.indexOf(s), 1); saveMonthlyData();
+    const iso = ruToIso(s.date); if (iso) $('shiftDateInput').value = iso;
+    if (s.executor && s.executor !== 'Без имени') { $('executorInput').value = s.executor; localStorage.setItem('jat_executor_name', s.executor); }
+    renderShiftTable(); renderMonthlyReport(); switchTab('daily');
+    showToast('Смена возвращена для редактирования');
+  }
+
+  async function deleteSelectedMonth() {
+    const shifts = shiftsOfSelectedMonth();
+    if (!shifts.length) { showToast('⚠️ В этом месяце нет смен'); return; }
+    if (await askConfirm('Удалить месяц', `Удалить ${shifts.length} смен за ${monthLabel(selectedMonth)}? Перед удалением будет создана резервная копия.`, 'Удалить')) {
+      await runAutoBackup(true);
+      const ids = new Set(shifts.map(s => s.id));
+      monthlyShifts = monthlyShifts.filter(s => !ids.has(s.id));
+      saveMonthlyData(); renderMonthlyReport(); renderQuickChips();
+      showToast(`Месяц «${monthLabel(selectedMonth)}» очищен`);
+    }
+  }
+
+  // ==========================================================================
+  //  ОТЧЁТЫ
+  // ==========================================================================
+  function getReportData() {
+    const executor = $('executorInput').value.trim() || 'Не указан';
+    if (exportContext === 'shift') {
+      const iso = $('shiftDateInput').value || todayIso();
+      let total = 0;
+      const rows = currentShift.map((p, i) => {
+        const t = Number(p.time) || 0; total = Number((total + t).toFixed(3));
+        return { num: i + 1, name: p.name, qty: Number(p.qty) || 1, norm: Number(p.norm) || 0, time: t };
+      });
+      return { type: 'shift', executor, dateStr: isoToRu(iso), iso, total, rows };
+    }
+    const shifts = shiftsOfSelectedMonth();
+    const { map, total } = buildTypeMap(shifts);
+    const plan = monthlyNormHours > 0 ? monthlyNormHours : 160;
+    const rows = Object.keys(map).sort(ruCollator.compare).map((name, i) => ({
+      num: i + 1, name, qty: map[name].qty, norm: Number(map[name].norm) || 0, total: map[name].total
+    }));
+    const execs = [...new Set(shifts.map(s => s.executor).filter(e => e && e !== 'Без имени'))];
+    const log = [];
+    [...shifts].sort((a, b) => ruToIso(a.date).localeCompare(ruToIso(b.date)) || a.id - b.id).forEach(s => {
+      (s.positions || []).forEach(p => log.push({ date: s.date, executor: s.executor || '', name: p.name, qty: p.qty, norm: p.norm, time: p.time }));
+    });
+    return {
+      type: 'month', executor: execs.length ? execs.join(', ') : executor, period: monthLabel(selectedMonth),
+      periodKey: selectedMonth, planNorm: plan, monthTotal: total, percent: ((total / plan) * 100).toFixed(1),
+      shiftsCount: shifts.length, rows, log
+    };
+  }
+
+  function buildMarkdownContent(d) {
+    if (d.type === 'shift') {
+      let md = `# Отчет о выполнении норм времени ЖАТ (Смена)\n\n- **Дата:** ${d.dateStr}\n- **Исполнитель:** ${d.executor}\n\n### Выполненные работы\n`;
+      md += `| № | Наименование прибора / работы | Кол-во | Норма (ч) | Итого (ч) |\n|:---:|:---|:---:|:---:|:---:|\n`;
+      d.rows.forEach(r => { md += `| ${r.num} | ${r.name} | ${r.qty} | ${fmt3(r.norm)} | ${fmt3(r.time)} |\n`; });
+      return md + `\n**ИТОГО ЗА СМЕНУ:** ${fmt3(d.total)} ч\n`;
+    }
+    let md = `# Сводный месячный отчет норм времени ЖАТ\n\n- **Период:** ${d.period}\n- **Исполнитель:** ${d.executor}\n- **Месячная норма (план):** ${d.planNorm} ч\n- **Всего отработано:** ${fmt3(d.monthTotal)} ч\n- **Выполнение нормы:** ${d.percent}%\n- **Закрыто смен:** ${d.shiftsCount}\n\n### Сводка по типам приборов\n`;
+    md += `| № | Прибор | Кол-во | Норма (ч) | Сумма (ч) |\n|:---:|:---|:---:|:---:|:---:|\n`;
+    d.rows.forEach(r => { md += `| ${r.num} | ${r.name} | ${r.qty} | ${fmt3(r.norm)} | ${fmt3(r.total)} |\n`; });
+    return md + `\n**ИТОГО ЗА МЕСЯЦ:** ${fmt3(d.monthTotal)} ч (${d.percent}%)\n`;
+  }
+
+  function buildTextContent(d) {
+    const line = '------------------------------------------------------------\n';
+    if (d.type === 'shift') {
+      let t = `ОТЧЕТ О ВЫПОЛНЕНИИ НОРМ ВРЕМЕНИ ЖАТ (СМЕНА)\nДата: ${d.dateStr}\nИсполнитель: ${d.executor}\n${line}№ | Наименование | Кол-во | Норма(ч) | Итого(ч)\n${line}`;
+      d.rows.forEach(r => { t += `${r.num}. ${r.name} | ${r.qty} шт. | ${fmt3(r.norm)} ч | ${fmt3(r.time)} ч\n`; });
+      return t + `${line}ИТОГО ЗА СМЕНУ: ${fmt3(d.total)} ч\n`;
+    }
+    let t = `СВОДНЫЙ МЕСЯЧНЫЙ ОТЧЕТ НОРМ ВРЕМЕНИ ЖАТ\nПериод: ${d.period}\nИсполнитель: ${d.executor}\nМесячная норма (план): ${d.planNorm} ч\nВсего отработано: ${fmt3(d.monthTotal)} ч (${d.percent}%)\nЗакрыто смен: ${d.shiftsCount}\n${line}№ | Прибор | Кол-во | Норма(ч) | Сумма(ч)\n${line}`;
+    d.rows.forEach(r => { t += `${r.num}. ${r.name} | ${r.qty} шт. | ${fmt3(r.norm)} ч | ${fmt3(r.total)} ч\n`; });
+    return t + `${line}ИТОГО ЗА МЕСЯЦ: ${fmt3(d.monthTotal)} ч\n`;
+  }
+
+  function buildExcelBlob(d) {
+    if (typeof XLSX === 'undefined') {
+      showToast('Библиотека Excel не загружена — сохраняю в TXT');
+      saveFormat = 'txt';
+      return new Blob([buildTextContent(d)], { type: 'text/plain;charset=utf-8' });
+    }
+    const wb = XLSX.utils.book_new();
+    const aoa = [];
+    if (d.type === 'shift') {
+      aoa.push(['ОТЧЕТ О ВЫПОЛНЕНИИ НОРМ ВРЕМЕНИ ЖАТ (СМЕНА)'], ['Дата:', d.dateStr], ['Исполнитель:', d.executor], [],
+        ['№', 'Наименование прибора / работы', 'Количество', 'Норма (ч)', 'Итого (ч)']);
+      d.rows.forEach(r => aoa.push([r.num, r.name, r.qty, r.norm, r.time]));
+      aoa.push([], ['ИТОГО ЗА СМЕНУ:', '', '', '', d.total]);
+    } else {
+      aoa.push(['СВОДНЫЙ МЕСЯЧНЫЙ ОТЧЕТ НОРМ ВРЕМЕНИ ЖАТ'], ['Период:', d.period], ['Исполнитель:', d.executor],
+        ['Месячная норма (план), ч:', d.planNorm], ['Всего отработано, ч:', d.monthTotal], ['Выполнение нормы, %:', Number(d.percent)],
+        ['Закрыто смен:', d.shiftsCount], [], ['№', 'Прибор', 'Количество', 'Норма (ч)', 'Сумма (ч)']);
+      d.rows.forEach(r => aoa.push([r.num, r.name, r.qty, r.norm, r.total]));
+      aoa.push([], ['ИТОГО ЗА МЕСЯЦ:', '', '', '', d.monthTotal]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 24 }, { wch: 34 }, { wch: 12 }, { wch: 11 }, { wch: 11 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Отчет');
+
+    if (d.type === 'month' && d.log.length) {
+      const l = [['Дата', 'Исполнитель', 'Прибор / работа', 'Кол-во', 'Норма (ч)', 'Итого (ч)']];
+      d.log.forEach(r => l.push([r.date, r.executor, r.name, r.qty, r.norm, r.time]));
+      const ws2 = XLSX.utils.aoa_to_sheet(l);
+      ws2['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 9 }, { wch: 10 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'По сменам');
+    }
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  // ==========================================================================
+  //  ОТПРАВКА ТЕКСТА
+  // ==========================================================================
+  async function sendViaSystemShare(context) {
+    if (context === 'shift' && !currentShift.length) { showToast('⚠️ Смена пуста'); return; }
+    if (context === 'month' && !shiftsOfSelectedMonth().length) { showToast('⚠️ В выбранном месяце нет смен'); return; }
+    exportContext = context;
+    const d = getReportData();
+    const title = context === 'shift' ? `Отчет ЖАТ за смену (${d.dateStr})` : `Сводный отчет ЖАТ за месяц (${d.period})`;
+    const text = buildTextContent(d);
+    cachedShareText = text;
+
+    const Share = plugin('Share');
+    if (isNative && Share) {
+      try { await Share.share({ title, text, dialogTitle: 'Отправить отчет' }); return; }
+      catch (e) { if (/cancel/i.test(String(e && e.message))) return; }
+    } else if (navigator.share) {
+      try { await navigator.share({ title, text }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const enc = encodeURIComponent(text);
+    $('shareLinkTg').href = `https://t.me/share/url?url=&text=${enc}`;
+    $('shareLinkWa').href = `https://api.whatsapp.com/send?text=${enc}`;
+    $('shareLinkMail').href = `mailto:?subject=${encodeURIComponent(title)}&body=${enc}`;
+    openModal('fallbackShareModal');
+  }
+  function copyReportText() {
+    if (!cachedShareText) return;
+    const done = () => { showToast('📋 Текст отчета скопирован'); closeModal('fallbackShareModal'); };
+    if (navigator.clipboard) navigator.clipboard.writeText(cachedShareText).then(done).catch(() => showToast('⚠️ Не удалось скопировать'));
+    else showToast('⚠️ Буфер обмена недоступен');
+  }
+
+  // ==========================================================================
+  //  СОХРАНЕНИЕ ФАЙЛОВ
+  // ==========================================================================
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1] || '');
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+  async function toBlob(data, mime) {
+    return data instanceof Blob ? data : new Blob([data], { type: `${mime};charset=utf-8` });
+  }
+
+  // Android: запись в Документы/ЖАТ (запасной вариант — меню «Поделиться»)
+  async function nativeWriteFile(blob, filename, directory, subdir) {
+    const FS = plugin('Filesystem');
+    if (!FS) throw new Error('no filesystem');
+    const data = await blobToBase64(blob);
+    return FS.writeFile({ path: subdir ? `${subdir}/${filename}` : filename, data, directory, recursive: true });
+  }
+  async function nativeShareFile(blob, filename, title) {
+    const Share = plugin('Share');
+    const res = await nativeWriteFile(blob, filename, 'CACHE', '');
+    await Share.share({ title: title || filename, url: res.uri, dialogTitle: 'Отправить файл' });
+  }
+
+  async function deliverFile(data, filename, mime, desc, mode) {
+    const pureMime = mime.split(';')[0].trim().toLowerCase();
+    const ext = '.' + filename.split('.').pop().toLowerCase();
+    const blob = await toBlob(data, pureMime);
+
+    if (isNative) {
+      try {
+        if (mode === 'share') { await nativeShareFile(blob, filename); return; }
+        try { await plugin('Filesystem').requestPermissions(); } catch (e) {}
+        await nativeWriteFile(blob, filename, 'DOCUMENTS', 'ЖАТ');
+        showToast(`✅ Сохранено: Документы/ЖАТ/${filename}`);
+        return;
+      } catch (e) {
+        if (/cancel/i.test(String(e && e.message))) return;
+        console.warn('native save failed', e);
+        try { await nativeShareFile(blob, filename); return; } catch (e2) { if (/cancel/i.test(String(e2 && e2.message))) return; }
+      }
+    } else {
+      if (mode === 'save' && typeof window.showSaveFilePicker === 'function') {
+        try {
+          const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: desc, accept: { [pureMime]: [ext] } }] });
+          const w = await handle.createWritable(); await w.write(blob); await w.close();
+          showToast('✅ Файл сохранен'); return;
+        } catch (e) { if (e.name === 'AbortError') return; }
+      }
+      const file = new File([blob], filename, { type: pureMime });
+      if (mode === 'share' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: filename }); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+      }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    showToast('✅ Файл скачан');
+  }
+
+  function openSaveModal(context) {
+    if (context === 'shift' && !currentShift.length) { showToast('⚠️ Смена пуста'); return; }
+    if (context === 'month' && !shiftsOfSelectedMonth().length) { showToast('⚠️ В выбранном месяце нет смен'); return; }
+    exportContext = context;
+    $('saveModalTitle').textContent = context === 'shift' ? 'Сохранить отчет за смену' : 'Сохранить отчет за месяц';
+    selectSaveFormat('xlsx');
+    openModal('saveModal');
+  }
+  function selectSaveFormat(f) {
+    saveFormat = f;
+    document.querySelectorAll('.format-chip').forEach(c => c.classList.toggle('active', c.dataset.fmt === f));
+  }
+  async function executeSaveAction(mode) {
+    const d = getReportData();
+    const tag = exportContext === 'shift' ? d.iso : d.periodKey;
+    const prefix = exportContext === 'shift' ? 'Смена_ЖАТ' : 'Месяц_ЖАТ';
+    let payload, mime, desc;
+    if (saveFormat === 'xlsx') {
+      payload = buildExcelBlob(d);
+      mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; desc = 'Excel (*.xlsx)';
+    } else if (saveFormat === 'md') { payload = buildMarkdownContent(d); mime = 'text/markdown'; desc = 'Markdown (*.md)'; }
+    else { payload = buildTextContent(d); mime = 'text/plain'; desc = 'Текст (*.txt)'; }
+    // если Excel недоступен, buildExcelBlob переключил формат на txt
+    if (saveFormat === 'txt') { mime = 'text/plain'; desc = 'Текст (*.txt)'; }
+    closeModal('saveModal');
+    await deliverFile(payload, `${prefix}_${tag}.${saveFormat}`, mime, desc, mode);
+  }
+
+  // ==========================================================================
+  //  РЕЗЕРВНОЕ КОПИРОВАНИЕ
+  // ==========================================================================
+  const IDB_NAME = 'JatStorageDB', IDB_STORE = 'handles';
+  function openIDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function saveDirectoryHandle(handle) {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(handle, 'backupDirHandle');
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function getSavedDirectoryHandle() {
+    try {
+      const db = await openIDB();
+      return await new Promise((resolve) => {
+        const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get('backupDirHandle');
+        req.onsuccess = () => resolve(req.result || null); req.onerror = () => resolve(null);
+      });
+    } catch (e) { return null; }
+  }
+
+  function createFullBackupObject() {
+    return {
+      appName: 'JAT_NORMS_BACKUP', version: 2,
+      backupDate: new Date().toLocaleDateString('ru-RU'), backupTimestamp: Date.now(),
+      data: {
+        executor: localStorage.getItem('jat_executor_name') || '',
+        monthNorm: localStorage.getItem('jat_month_norm') || '160',
+        currentShift, monthlyShifts, devicesDb
+      }
+    };
+  }
+
+  async function writeWebFolderBackup(dirHandle) {
+    try {
+      if ((await dirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+        if ((await dirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') return false;
+      }
+      const fh = await dirHandle.getFileHandle('jat_backup_auto.json', { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(createFullBackupObject(), null, 2));
+      await w.close();
+      localStorage.setItem('jat_last_shadow_backup', todayIso());
+      localStorage.setItem('jat_last_backup_ts', String(Date.now()));
+      return true;
+    } catch (e) { console.warn('web backup failed', e); return false; }
+  }
+
+  // Android: датированные копии в Документы/ЖАТ, хранится 7 последних
+  async function writeNativeBackup() {
+    const FS = plugin('Filesystem');
+    if (!FS) return false;
+    const blob = new Blob([JSON.stringify(createFullBackupObject())], { type: 'application/json' });
+    const name = `jat_backup_${todayIso()}.json`;
+    try { try { await FS.requestPermissions(); } catch (e) {}
+      await nativeWriteFile(blob, name, 'DOCUMENTS', 'ЖАТ');
+      localStorage.setItem('jat_backup_where', 'Документы/ЖАТ');
+      try {
+        const { files } = await FS.readdir({ path: 'ЖАТ', directory: 'DOCUMENTS' });
+        const old = files.map(f => f.name || f).filter(n => /^jat_backup_\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort().slice(0, -7);
+        for (const n of old) { try { await FS.deleteFile({ path: `ЖАТ/${n}`, directory: 'DOCUMENTS' }); } catch (e) {} }
+      } catch (e) {}
+    } catch (e) {
+      console.warn('documents backup failed, using app storage', e);
+      try {
+        await nativeWriteFile(blob, name, 'DATA', 'backups');
+        localStorage.setItem('jat_backup_where', 'память приложения');
+      } catch (e2) { return false; }
+    }
+    localStorage.setItem('jat_last_shadow_backup', todayIso());
+    localStorage.setItem('jat_last_backup_ts', String(Date.now()));
+    return true;
+  }
+
+  async function runAutoBackup(force) {
+    try {
+      if (isNative) {
+        if (force || localStorage.getItem('jat_last_shadow_backup') !== todayIso()) { await writeNativeBackup(); updateBackupStatusUI(); }
+        return;
+      }
+      const h = await getSavedDirectoryHandle();
+      if (h && (force || localStorage.getItem('jat_last_shadow_backup') !== todayIso())) { await writeWebFolderBackup(h); updateBackupStatusUI(); }
+    } catch (e) { console.warn(e); }
+  }
+
+  async function requestFolderOneTime() {
+    if (!('showDirectoryPicker' in window)) { showToast('⚠️ Выбор папки не поддерживается этим браузером'); return; }
+    try {
+      const h = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await saveDirectoryHandle(h);
+      updateBackupStatusUI();
+      if (await writeWebFolderBackup(h)) showToast('✅ Папка подключена, копия сохранена');
+      updateBackupStatusUI();
+    } catch (e) { if (e.name !== 'AbortError') console.warn(e); }
+  }
+
+  async function initDailyBackup() {
+    if (isNative) { runAutoBackup(false); return; }
+    const h = await getSavedDirectoryHandle();
+    if (h) { runAutoBackup(false); }
+    else if (!localStorage.getItem('jat_backup_prompt_dismissed') && 'showDirectoryPicker' in window) {
+      setTimeout(() => openModal('firstTimeFolderModal'), 1200);
+    }
+  }
+
+  async function updateBackupStatusUI() {
+    const badge = $('backupStatusBadge');
+    const ts = Number(localStorage.getItem('jat_last_backup_ts'));
+    const when = ts ? new Date(ts).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
+    let active = isNative ? true : !!(await getSavedDirectoryHandle());
+    badge.textContent = active ? 'Активен' : 'Не настроен';
+    badge.className = 'backup-badge ' + (active ? 'badge-on' : 'badge-off');
+    if (isNative) {
+      const where = localStorage.getItem('jat_backup_where') || 'Документы/ЖАТ';
+      $('backupHint').textContent = `Копии (последние 7) хранятся в: ${where}.` + (when ? ` Последняя: ${when}.` : ' Первая копия появится после первой записи.') + ' Файл можно сохранить в облако или на другой телефон.';
+    } else {
+      $('backupHint').textContent = 'Копия всех смен, норм и базы защищает данные от очистки кэша.' + (when ? ` Последняя: ${when}.` : '');
+    }
+  }
+
+  function downloadManualBackup() {
+    const content = JSON.stringify(createFullBackupObject(), null, 2);
+    deliverFile(content, `jat_backup_${todayIso()}.json`, 'application/json', 'Резервная копия (*.json)', isNative ? 'share' : 'save');
+  }
+
+  function restoreFromBackupFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const backup = JSON.parse(e.target.result);
+        const data = backup.data || backup;
+        if (!data || (!data.monthlyShifts && !data.devicesDb && !data.currentShift)) { showToast('⚠️ Некорректный файл резервной копии'); return; }
+        const when = backup.backupDate ? ` от ${backup.backupDate}` : '';
+        if (await askConfirm('Восстановление', `Восстановить данные из резервной копии${when}? Текущие данные будут заменены.`, 'Восстановить')) {
+          if (data.executor !== undefined) localStorage.setItem('jat_executor_name', data.executor);
+          if (data.monthNorm !== undefined) localStorage.setItem('jat_month_norm', data.monthNorm);
+          if (data.currentShift) lsSet('jat_current_shift', data.currentShift);
+          if (data.monthlyShifts) lsSet('jat_monthly_shifts', data.monthlyShifts);
+          if (data.devicesDb) lsSet('jat_norms_db', data.devicesDb);
+          selectedMonth = '';
+          reloadAll();
+          showToast('✅ Все данные восстановлены');
+        }
+      } catch (err) { showToast('⚠️ Ошибка при чтении файла бэкапа'); }
+      finally { event.target.value = ''; }
+    };
+    reader.readAsText(file);
+  }
+
+  // ==========================================================================
+  //  БАЗА ПРИБОРОВ: UI
+  // ==========================================================================
+  function renderDbList() {
+    const q = $('dbSearchInput').value.trim().toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const list = tokens.length ? devicesDb.filter(d => tokens.every(t => d.name.toLowerCase().includes(t))) : devicesDb;
+    $('dbTotalBadge').textContent = `${devicesDb.length} шт.`;
+    if (!list.length) { $('dbList').innerHTML = `<div class="empty-state">${devicesDb.length ? 'Приборы не найдены' : 'База пуста — добавьте приборы или импортируйте файл'}</div>`; return; }
+    $('dbList').innerHTML = list.slice(0, 300).map(d => {
+      const i = devicesDb.indexOf(d);
+      return `<div class="db-row">
+        <span class="db-row-name">${escapeHtml(d.name)}</span>
+        <span class="db-row-norm">${fmt3(d.total)} ч</span>
+        <div class="db-row-actions">
+          <button class="action-icon-btn" data-dbedit="${i}" aria-label="Изменить">✏️</button>
+          <button class="action-icon-btn del-btn" data-dbdel="${i}" aria-label="Удалить">🗑</button>
+        </div></div>`;
+    }).join('') + (list.length > 300 ? `<div class="empty-state">Показано 300 из ${list.length}. Уточните поиск.</div>` : '');
+  }
+
+  async function deleteDbDevice(i) {
+    const d = devicesDb[i]; if (!d) return;
+    if (await askConfirm('Удалить прибор', `Удалить «${d.name}» из базы? Уже закрытые смены не изменятся.`, 'Удалить')) {
+      devicesDb.splice(i, 1); saveDatabase(); renderDbList(); renderQuickChips();
+      showToast(`Прибор «${d.name}» удалён`);
+    }
+  }
+
+  function openAddDeviceModal(prefill = '') {
+    editingOriginalIndex = null;
+    $('deviceModalTitle').textContent = 'Добавить прибор в базу';
+    $('newDeviceName').value = typeof prefill === 'string' ? prefill : '';
+    $('newDeviceNorm').value = '';
+    $('deviceDropdown').style.display = 'none';
+    openModal('addDeviceModal');
+    setTimeout(() => ($('newDeviceName').value ? $('newDeviceNorm') : $('newDeviceName')).focus(), 50);
+  }
+  function openEditDeviceModal(i) {
+    const d = devicesDb[i]; if (!d) return;
+    editingOriginalIndex = i;
+    $('deviceModalTitle').textContent = 'Редактировать прибор';
+    $('newDeviceName').value = d.name; $('newDeviceNorm').value = d.total;
+    openModal('addDeviceModal');
+  }
+  function saveDeviceModal() {
+    const name = $('newDeviceName').value.trim();
+    const norm = parseRuFloat($('newDeviceNorm').value);
+    if (!name) { showToast('⚠️ Введите название прибора'); return; }
+    if (isNaN(norm) || norm <= 0) { showToast('⚠️ Введите норму времени в часах'); return; }
+
+    const dup = devicesDb.findIndex(d => d.name.toLowerCase() === name.toLowerCase());
+    if (editingOriginalIndex !== null && devicesDb[editingOriginalIndex]) {
+      if (dup >= 0 && dup !== editingOriginalIndex) { showToast('⚠️ Прибор с таким названием уже существует'); return; }
+      devicesDb[editingOriginalIndex].name = name; devicesDb[editingOriginalIndex].total = norm;
+      showToast(`✅ Прибор «${name}» обновлён`);
+    } else if (dup >= 0) { devicesDb[dup].total = norm; showToast(`✅ Норма «${devicesDb[dup].name}» обновлена`); }
+    else { devicesDb.push({ name, total: norm }); showToast(`✅ Прибор «${name}» добавлен`); }
+
+    saveDatabase(); closeModal('addDeviceModal'); renderDbList(); renderQuickChips();
+    selectedDevice = devicesDb.find(d => d.name.toLowerCase() === name.toLowerCase()) || null;
+    if (currentTab() === 'daily' || editingOriginalIndex === null) $('deviceSearchInput').value = name;
+    editingOriginalIndex = null;
+  }
+
+  // ---------- экспорт / импорт базы ----------
+  function exportDbToMD() {
+    sortDatabase();
+    let md = `# База норм времени ЖАТ\n\nГотовый блок кода для переменной \`const initialDb\`:\n\n\`\`\`javascript\nconst initialDb = [\n`;
+    md += devicesDb.map(d => `  ${JSON.stringify({ name: d.name, total: Number(d.total) })}`).join(',\n');
+    md += `\n];\n\`\`\`\n\n### Таблица приборов\n| Прибор | Норма (ч) |\n|:---|:---:|\n`;
+    devicesDb.forEach(d => { md += `| ${d.name} | ${fmt3(d.total)} |\n`; });
+    deliverFile(md, 'База_приборов_ЖАТ_код.md', 'text/markdown', 'Markdown (*.md)', isNative ? 'share' : 'save');
+  }
+  function exportDbToXLSX() {
+    if (typeof XLSX === 'undefined') { showToast('⚠️ Библиотека Excel недоступна'); return; }
+    sortDatabase();
+    const aoa = [['Наименование прибора / работы', 'Норма времени (ч)']];
+    devicesDb.forEach(d => aoa.push([d.name, Number(d.total)]));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 38 }, { wch: 20 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'База приборов ЖАТ');
+    const blob = new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    deliverFile(blob, 'База_приборов_ЖАТ.xlsx', blob.type, 'Excel (*.xlsx)', isNative ? 'share' : 'save');
+  }
+
+  function upsertImported(name, norm, lookup, counter) {
+    if (!name || isNaN(norm) || norm <= 0) return;
+    const lower = name.toLowerCase();
+    if (lookup.has(lower)) devicesDb[lookup.get(lower)].total = norm;
+    else { devicesDb.push({ name, total: norm }); lookup.set(lower, devicesDb.length - 1); }
+    counter.n++;
+  }
+
+  async function importDbFromFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) await parseAndImportExcel(file);
+      else await parseAndImportText(file);
+    } catch (err) { console.error(err); showToast('⚠️ Ошибка при чтении файла'); }
+    finally { event.target.value = ''; }
+  }
+
+  function finishImport(counter) {
+    if (counter.n > 0) { saveDatabase(); renderDbList(); renderQuickChips(); showToast(`✅ Импортировано приборов: ${counter.n}`); }
+    else showToast('⚠️ Не удалось распознать данные в файле');
+  }
+
+  async function parseAndImportExcel(file) {
+    if (typeof XLSX === 'undefined') { showToast('⚠️ Библиотека Excel недоступна'); return; }
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+    const lookup = new Map(); devicesDb.forEach((d, i) => lookup.set(d.name.toLowerCase(), i));
+    const c = { n: 0 };
+    rows.forEach(row => {
+      if (!row || row.length < 2) return;
+      const name = String(row[0] || '').trim();
+      const l = name.toLowerCase();
+      if (l.includes('наименование') || l === 'прибор') return;
+      upsertImported(name, parseRuFloat(row[1]), lookup, c);
+    });
+    finishImport(c);
+  }
+
+  async function parseAndImportText(file) {
+    const text = await file.text();
+    const lookup = new Map(); devicesDb.forEach((d, i) => lookup.set(d.name.toLowerCase(), i));
+    const c = { n: 0 };
+
+    // 1) JS/JSON-массив объектов
+    try {
+      const m = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (m) {
+        const cleaned = m[0].replace(/\/\/.*$/gm, '').replace(/'/g, '"').replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":').replace(/,\s*([\]}])/g, '$1');
+        const arr = JSON.parse(cleaned);
+        if (Array.isArray(arr)) arr.forEach(it => upsertImported(String(it.name || it.title || '').trim(), parseRuFloat(it.total != null ? it.total : it.norm), lookup, c));
+      }
+    } catch (e) {}
+
+    // 2) пары name/total регулярным выражением
+    if (!c.n) {
+      const re = /name\s*:\s*["']([^"']+)["']\s*,\s*(?:total|norm)\s*:\s*([0-9.,]+)/gi;
+      let m; while ((m = re.exec(text)) !== null) upsertImported(m[1].trim(), parseRuFloat(m[2]), lookup, c);
+    }
+
+    // 3) таблица Markdown
+    if (!c.n) {
+      text.split('\n').forEach(line => {
+        const t = line.trim();
+        if (!t.startsWith('|') || t.includes('---')) return;
+        const parts = t.split('|').map(p => p.trim()).filter(Boolean);
+        if (parts.length >= 2 && parts[0].toLowerCase() !== 'прибор' && !parts[0].toLowerCase().includes('наименование'))
+          upsertImported(parts[0], parseRuFloat(parts[1]), lookup, c);
+      });
+    }
+    finishImport(c);
+  }
+
+  async function resetDbToDefault() {
+    if (await askConfirm('Сброс базы', 'Сбросить базу к исходной? Все добавленные вручную приборы будут удалены.', 'Сбросить')) {
+      devicesDb = [...initialDb]; saveDatabase(); renderDbList(); renderQuickChips(); showToast('База сброшена к исходной');
+    }
+  }
+
+  // ==========================================================================
+  //  ИНИЦИАЛИЗАЦИЯ И СОБЫТИЯ
+  // ==========================================================================
+  function bindEvents() {
+    document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
+    document.querySelectorAll('.format-chip').forEach(c => c.addEventListener('click', () => selectSaveFormat(c.dataset.fmt)));
+
+    // смена
+    $('executorInput').addEventListener('input', () => localStorage.setItem('jat_executor_name', $('executorInput').value.trim()));
+    const search = $('deviceSearchInput');
+    search.addEventListener('input', debounce(handleDeviceSearch, 100));
+    search.addEventListener('focus', handleDeviceSearch);
+    search.addEventListener('keydown', (e) => {
+      const dd = $('deviceDropdown');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!dropdownMatches.length) return;
+        e.preventDefault();
+        dropdownHl = (dropdownHl + (e.key === 'ArrowDown' ? 1 : -1) + dropdownMatches.length) % dropdownMatches.length;
+        renderDropdown(search.value.trim());
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const exact = devicesDb.find(d => d.name.toLowerCase() === search.value.trim().toLowerCase());
+        if (exact) selectDevice(exact);
+        else if (dd.style.display === 'block' && dropdownMatches[dropdownHl]) selectDevice(dropdownMatches[dropdownHl]);
+      } else if (e.key === 'Escape') dd.style.display = 'none';
+    });
+    $('deviceDropdown').addEventListener('click', (e) => {
+      const item = e.target.closest('.dropdown-item');
+      if (item) { selectDevice(dropdownMatches[Number(item.dataset.i)]); return; }
+      if (e.target.closest('[data-add]')) openAddDeviceModal(search.value.trim());
+    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('.dropdown-container')) $('deviceDropdown').style.display = 'none'; });
+    $('quickChips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip'); if (!chip) return;
+      const d = devicesDb.find(x => x.name === chip.dataset.name); if (d) selectDevice(d);
+    });
+    $('qtyMinus').addEventListener('click', () => { const v = parseRuFloat($('quantityInput').value) || 1; if (v - 1 > 0) $('quantityInput').value = Number((v - 1).toFixed(2)); });
+    $('qtyPlus').addEventListener('click', () => { const v = parseRuFloat($('quantityInput').value) || 0; $('quantityInput').value = Number((v + 1).toFixed(2)); });
+    $('quantityInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPosition(); } });
+    $('addPositionBtn').addEventListener('click', addPosition);
+    $('shiftTableBody').addEventListener('change', onShiftTableChange);
+    $('shiftTableBody').addEventListener('click', (e) => { const b = e.target.closest('[data-del]'); if (b) deletePosition(Number(b.dataset.del)); });
+    $('shareShiftBtn').addEventListener('click', () => sendViaSystemShare('shift'));
+    $('saveShiftBtn').addEventListener('click', () => openSaveModal('shift'));
+    $('closeShiftBtn').addEventListener('click', closeShift);
+    $('clearShiftBtn').addEventListener('click', clearCurrentShift);
+
+    // месяц
+    $('monthSelect').addEventListener('change', () => { selectedMonth = $('monthSelect').value; renderMonthlyReport(); });
+    $('monthNormInput').addEventListener('input', () => {
+      const v = parseRuFloat($('monthNormInput').value);
+      if (!isNaN(v) && v > 0) { monthlyNormHours = v; localStorage.setItem('jat_month_norm', v); renderMonthlyReport(); }
+    });
+    $('monthlyShiftsList').addEventListener('click', (e) => {
+      const t = e.target.closest('button, .shift-head'); if (!t) return;
+      if (t.dataset.toggle) t.closest('.shift-card').classList.toggle('open');
+      else if (t.dataset.edit) openEditShiftDateModal(Number(t.dataset.edit));
+      else if (t.dataset.reopen) reopenShift(Number(t.dataset.reopen));
+      else if (t.dataset.delshift) deleteShift(Number(t.dataset.delshift));
+    });
+    $('shareMonthBtn').addEventListener('click', () => sendViaSystemShare('month'));
+    $('saveMonthBtn').addEventListener('click', () => openSaveModal('month'));
+    $('deleteMonthBtn').addEventListener('click', deleteSelectedMonth);
+    $('saveShiftDateBtn').addEventListener('click', saveNewShiftDate);
+
+    // сохранение / отправка
+    $('saveFileBtn').addEventListener('click', () => executeSaveAction('save'));
+    $('shareFileBtn').addEventListener('click', () => executeSaveAction('share'));
+    $('copyTextBtn').addEventListener('click', copyReportText);
+
+    // настройки
+    $('pickFolderBtn').addEventListener('click', requestFolderOneTime);
+    $('firstFolderOkBtn').addEventListener('click', () => { closeModal('firstTimeFolderModal'); requestFolderOneTime(); });
+    $('firstFolderLaterBtn').addEventListener('click', () => { closeModal('firstTimeFolderModal'); localStorage.setItem('jat_backup_prompt_dismissed', 'true'); });
+    $('manualBackupBtn').addEventListener('click', async () => {
+      if (isNative) { await runAutoBackup(true); showToast('✅ Копия создана'); }
+      else downloadManualBackup();
+    });
+    $('restoreBtn').addEventListener('click', () => $('restoreFileInput').click());
+    $('restoreFileInput').addEventListener('change', restoreFromBackupFile);
+    $('themeBtn').addEventListener('click', cycleTheme);
+    $('dbSearchInput').addEventListener('input', debounce(renderDbList, 120));
+    $('addDeviceBtn').addEventListener('click', () => openAddDeviceModal());
+    $('saveDeviceBtn').addEventListener('click', saveDeviceModal);
+    $('newDeviceNorm').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveDeviceModal(); });
+    $('dbList').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.dbedit) openEditDeviceModal(Number(b.dataset.dbedit));
+      else if (b.dataset.dbdel) deleteDbDevice(Number(b.dataset.dbdel));
+    });
+    $('exportMdBtn').addEventListener('click', exportDbToMD);
+    $('exportXlsxBtn').addEventListener('click', exportDbToXLSX);
+    $('importDbBtn').addEventListener('click', () => $('importFileInput').click());
+    $('importFileInput').addEventListener('change', importDbFromFile);
+    $('resetDbBtn').addEventListener('click', resetDbToDefault);
+
+    // кнопка «Назад» на Android
+    const App = plugin('App');
+    if (isNative && App && App.addListener) {
+      App.addListener('backButton', () => {
+        const m = topOpenModal();
+        if (m) { if (m === 'confirmModal') $('confirmNoBtn').click(); else closeModal(m); return; }
+        if ($('deviceDropdown').style.display === 'block') { $('deviceDropdown').style.display = 'none'; return; }
+        if (currentTab() !== 'daily') { switchTab('daily'); return; }
+        App.exitApp();
+      });
+    }
+    // сохранить данные при сворачивании приложения
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveCurrentShift(); });
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    applyTheme();
+    bindEvents();
+    $('shiftDateInput').value = todayIso();
+    selectedMonth = todayIso().slice(0, 7);
+    reloadAll();
+    updateBackupStatusUI();
+    // просим браузер не вычищать данные приложения
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    initDailyBackup();
+  });
+</script>
+</body>
+</html>
